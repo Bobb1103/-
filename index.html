@@ -11,62 +11,67 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
             font-family: 'Inter', 'Microsoft YaHei', sans-serif;
-            background-color: #f3f4f6;
+            background-color: #f7f9fb; /* 浅灰色背景 */
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             padding: 20px;
         }
+        /* 优化输入框和按钮的焦点效果 */
+        input:focus, button:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); /* indigo-500 */
+        }
     </style>
 </head>
 <body class="p-4 sm:p-8">
 
-    <div id="app" class="w-full max-w-4xl bg-white shadow-xl rounded-2xl p-6 md:p-10">
+    <div id="app" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 border border-gray-100">
         <header class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 border-b-2 pb-2 mb-2">送货单電子化助手</h1>
-            <p class="text-gray-600">拍攝手寫送貨單，自動識別並合併為電子表格。</p>
+            <h1 class="text-3xl font-extrabold text-indigo-700 border-b-2 border-indigo-100 pb-3 mb-2">手写送货单电子化助手</h1>
+            <p class="text-gray-600">拍摄手写送货单，自动识别并合并为电子表格。</p>
         </header>
 
-        <!-- API Key 設定區 (當 Key 遺失時顯示) -->
-        <section id="apiKeySection" class="mb-8 p-6 bg-yellow-50 border border-yellow-200 rounded-xl hidden">
-            <h2 class="text-xl font-semibold text-yellow-800 mb-4">🔑 設定 API 密鑰</h2>
-            <p class="text-sm text-yellow-700 mb-4">為了保護您的帳戶安全，密鑰將儲存在您的本地瀏覽器中，不會上傳到伺服器。</p>
+        <!-- API Key 设置区 (当 Key 丢失时显示) -->
+        <section id="apiKeySection" class="mb-8 p-6 bg-yellow-50 border border-yellow-300 rounded-lg shadow-inner hidden">
+            <h2 class="text-xl font-semibold text-yellow-800 mb-4">🔑 设置 API 密钥</h2>
+            <p class="text-sm text-yellow-700 mb-4">为了保护您的账户安全，密钥将存储在您的本地浏览器中，不会上传到服务器。</p>
             <div class="flex flex-col gap-3">
-                <input type="password" id="apiKeyInput" placeholder="請輸入您的 Gemini API Key (AIzaSy...)" 
+                <input type="password" id="apiKeyInput" placeholder="请输入您的 Gemini API Key (AIzaSy...)" 
                     class="w-full p-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none">
-                <button id="saveKeyButton" class="w-full py-2 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition">
-                    儲存密鑰並開始使用
+                <button id="saveKeyButton" class="w-full py-2 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition duration-150">
+                    保存密钥并开始使用
                 </button>
             </div>
         </section>
 
-        <!-- 主要應用內容 (設定 Key 後顯示) -->
+        <!-- 主要应用内容 (设置 Key 后显示) -->
         <div id="mainContent" class="hidden">
             
             <!-- 密鑰管理 (重置連結) -->
             <div class="flex justify-end mb-4">
-                <button id="resetKeyButton" class="text-xs text-gray-400 hover:text-gray-600 underline">
-                    重置/更換 API 密鑰
+                <button id="resetKeyButton" class="text-xs text-gray-400 hover:text-indigo-600 underline transition duration-150">
+                    重置/更换 API 密钥
                 </button>
             </div>
 
-            <!-- 步驟 1: 圖片上傳 -->
-            <section class="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-xl">
-                <h2 class="text-xl font-semibold text-blue-800 mb-4">第一步：上傳手寫送貨單照片 (可多選)</h2>
+            <!-- 步骤 1: 圖片上傳 -->
+            <section class="mb-8 p-6 bg-indigo-50 border border-indigo-200 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold text-indigo-800 mb-4">第一步：上传手写送货单照片 (可多选)</h2>
                 <div class="flex flex-col sm:flex-row gap-4">
                     <input type="file" id="imageInput" accept="image/*" multiple
                         class="flex-grow text-sm text-gray-700
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-full file:border-0
                         file:text-sm file:font-semibold
-                        file:bg-blue-100 file:text-blue-700
-                        hover:file:bg-blue-200"
+                        file:bg-indigo-200 file:text-indigo-800
+                        hover:file:bg-indigo-300 transition duration-150"
                     />
                     <button id="clearImageButton"
-                            class="px-4 py-2 bg-red-500 text-white font-medium rounded-full text-sm hover:bg-red-600 transition duration-300 disabled:opacity-50"
+                            class="px-4 py-2 bg-red-500 text-white font-medium rounded-lg text-sm hover:bg-red-600 transition duration-150 disabled:opacity-50"
                             disabled>
-                        🗑️ 清除所有圖片
+                        🗑️ 清除所有图片
                     </button>
                 </div>
             </section>
@@ -74,36 +79,36 @@
             <!-- 步驟 2: 處理與指示 -->
             <section class="mb-8">
                 <button id="processButton"
-                        class="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-300 disabled:opacity-50"
+                        class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
                         disabled>
-                    開始處理所有圖片並轉化
+                    开始处理所有图片并转化
                 </button>
-                <div id="loadingIndicator" class="mt-4 text-center hidden">
-                    <div class="animate-spin inline-block w-6 h-6 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
-                    <span id="loadingMessage" class="ml-3 text-indigo-600 font-medium">正在讀取圖片 1 / 0，請稍候...</span>
+                <div id="loadingIndicator" class="mt-4 p-3 text-center rounded-lg bg-indigo-50 border border-indigo-200 hidden">
+                    <div class="animate-spin inline-block w-5 h-5 border-3 border-indigo-500 border-t-transparent rounded-full"></div>
+                    <span id="loadingMessage" class="ml-3 text-indigo-600 font-medium">正在读取图片 1 / 0，请稍候...</span>
                 </div>
-                <div id="messageBox" class="mt-4 p-3 rounded-lg text-sm hidden"></div>
+                <div id="messageBox" class="mt-4 p-3 rounded-lg text-sm font-medium hidden"></div>
             </section>
 
             <!-- 步驟 3: 結果與匯出 -->
             <section id="resultsSection" class="hidden">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">📦 彙總識別結果表格</h2>
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">📦 汇总识别结果表格 (已按单号排序)</h2>
                 
-                <div id="tableOutput" class="overflow-x-auto mb-4">
+                <div id="tableOutput" class="overflow-x-auto mb-4 border border-gray-200 rounded-lg shadow-md">
                     <!-- 表格內容將在此處渲染 -->
                 </div>
 
                 <button id="exportButton"
-                        class="w-full py-2 bg-green-500 text-white font-medium rounded-xl hover:bg-green-600 transition duration-300 disabled:opacity-50"
+                        class="w-full py-2 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition duration-150 disabled:opacity-50"
                         disabled>
-                    ⬇️ 下載 CSV 檔案 (Excel 格式)
+                    ⬇️ 下载 CSV 文件 (Excel 格式)
                 </button>
             </section>
 
             <!-- 步驟 4: 預覽 -->
-            <section id="previewSection" class="mt-8 border-t pt-6 hidden">
-                <h2 class="text-lg font-semibold text-gray-700 mb-2">首張圖片預覽</h2>
-                <img id="imagePreview" class="max-w-full h-auto rounded-lg shadow-md border" />
+            <section id="previewSection" class="mt-8 border-t border-gray-200 pt-6 hidden">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">首张图片预览</h2>
+                <img id="imagePreview" class="max-w-full h-auto rounded-lg shadow-lg border border-gray-300" />
             </section>
         </div>
     </div>
@@ -172,15 +177,15 @@
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
                 showMainContent();
-                showMessage('密鑰已儲存到本地瀏覽器。', 'success');
+                showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
-                alert('請輸入有效的 Gemini API Key (通常以 AIza 開頭)');
+                alert('请输入有效的 Gemini API Key (通常以 AIza 开头)');
             }
         });
 
         D.resetKeyButton.addEventListener('click', () => {
-            if(confirm('確定要清除本地儲存的 API 密鑰嗎？清除後需要重新輸入。')) {
-                localStorage.removeItem('GEMINI_API_KEY'); // 從本地儲存中移除
+            if(confirm('确定要清除本地保存的 API 密钥吗？清除后需要重新输入。')) {
+                localStorage.removeItem('GEMINI_API_KEY'); // 从本地儲存中移除
                 appState.apiKey = "";
                 D.apiKeyInput.value = "";
                 resetApp(); // 重置應用狀態
@@ -223,7 +228,7 @@
             
             D.tableOutput.innerHTML = '';
             D.messageBox.classList.add('hidden');
-            if(appState.apiKey) showMessage('請選擇一張或多張送貨單圖片開始處理。', 'info');
+            if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
         // 將 File 轉換為 Base64
@@ -241,7 +246,7 @@
         // 轉換為 CSV 格式 (包含送貨單號)
         function toCSV(items) {
             // CSV 標頭: 送貨單號, 名稱及規格, 單位, 數量, 單價
-            const headers = ["送貨單號", "名稱及規格", "單位", "數量", "單價"];
+            const headers = ["送货单号", "名称及规格", "单位", "数量", "单价"];
             let csv = headers.join(',') + '\n';
 
             items.forEach(item => {
@@ -261,20 +266,20 @@
         // 渲染 HTML 表格 (包含送貨單號)
         function renderTable(items) {
             if (!items || items.length === 0) {
-                D.tableOutput.innerHTML = '<p class="text-center text-gray-500 p-4">未提取到任何有效數據。</p>';
+                D.tableOutput.innerHTML = '<p class="text-center text-gray-500 p-4">未提取到任何有效数据。</p>';
                 return;
             }
 
             // 表格標頭：第一欄是送貨單號
             let html = `
-                <table class="min-w-full divide-y divide-gray-200 rounded-xl overflow-hidden shadow-lg">
-                    <thead class="bg-indigo-50">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-indigo-100">
                         <tr>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">送貨單號</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名稱及規格</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">單位</th>
-                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">數量</th>
-                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">單價</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider rounded-tl-lg">送货单号</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">名称及规格</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">单位</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">数量</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider rounded-tr-lg">单价</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
@@ -285,20 +290,20 @@
                 const unitPrice = item.unitPrice || 0;
                 const priceDisplay = typeof unitPrice === 'number' ? `¥${unitPrice.toFixed(2)}` : '-';
                 
-                let priceClass = "text-gray-600";
+                let priceClass = "text-gray-700";
                 let rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 
                 // 如果 isPriceCertain 為 false，則標紅
                 if (item.isPriceCertain === false) {
-                     priceClass = "text-red-600 font-bold bg-red-100 rounded px-1";
+                     priceClass = "text-red-700 font-bold bg-red-100 rounded px-1";
                 }
 
                 html += `
-                    <tr class="${rowClass} hover:bg-indigo-100 transition duration-150">
+                    <tr class="${rowClass} hover:bg-indigo-50 transition duration-150">
                         <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-blue-600">${item.deliveryNo || '-'}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${item.nameAndSpec || '-'}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-800">${item.nameAndSpec || '-'}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${item.unit || '只'}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-600">${quantity}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">${quantity}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-right ${priceClass}">${priceDisplay}</td>
                     </tr>
                 `;
@@ -316,11 +321,11 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.setAttribute('href', url);
-            a.setAttribute('download', '送貨單彙總數據.csv');
+            a.setAttribute('download', '送货单汇总数据.csv');
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showMessage('CSV 檔案已生成並開始下載。', 'success');
+            showMessage('CSV 檔案已生成并开始下载。', 'success');
         }
 
         // --- Gemini API 核心邏輯 ---
@@ -334,16 +339,16 @@
             const itemSchema = {
                 type: "OBJECT",
                 properties: {
-                    "deliveryNo": { "type": "STRING", "description": "送貨單號 (No)" }, // 提取送貨單號
+                    "deliveryNo": { "type": "STRING", "description": "送货单号 (No)" }, // 提取送货单号
                     "items": {
                         type: "ARRAY",
                         items: {
                             type: "OBJECT",
                             properties: {
-                                "nameAndSpec": { "type": "STRING", "description": "名稱及規格。僅提取'名稱及規格'欄下的內容，包含材質前綴(如PE,OPP)和尺寸。不要提取'貨號'欄的內容。如果規格是數字，請用*號連接，如 30*40+5。" },
-                                "quantity": { "type": "NUMBER", "description": "數量" },
-                                "unitPrice": { "type": "NUMBER", "description": "單價" },
-                                "isPriceCertain": { "type": "BOOLEAN", "description": "如果單價數字因塗改、模糊、劃線修改等原因難以辨認，設為false，否則為true。" }
+                                "nameAndSpec": { "type": "STRING", "description": "名称及规格。仅提取'名称及规格'栏下的内容，包含材质前缀(如PE,OPP)和尺寸。不要提取'货号'栏的内容。如果规格是数字，请用*号连接，如 30*40+5。" },
+                                "quantity": { "type": "NUMBER", "description": "数量" },
+                                "unitPrice": { "type": "NUMBER", "description": "单价" },
+                                "isPriceCertain": { "type": "BOOLEAN", "description": "如果单价数字因涂改、模糊、划线修改等原因难以辨认，设为false，否则为true。" }
                             },
                             required: ["nameAndSpec", "quantity", "unitPrice", "isPriceCertain"]
                         }
@@ -354,19 +359,19 @@
 
             // 系統指令 (System Prompt) - 告訴模型如何扮演
             const systemPrompt = `你是一個專業的送貨單數據提取助手。
-            1. **目標**：提取"送貨單號"以及列表中的“名稱及規格”、“數量”、“單價”。默認單位為“只”。
-            2. **規格格式**：
-               - 數字*數字+數字+數字.數字 (如 26*37+5+2.5)
-               - 數字*數字+數字 (如 30*40+5)
-               - 數字*數字*數字 (如 52*38*67 或 30*40*50)
-               - 數字*數字 (如 50*70)
+            1. **目標**：提取"送货单号"以及列表中的“名称及规格”、“数量”、“单价”。默认单位为“只”。
+            2. **规格格式**：
+               - 数字*数字+数字+数字.数字 (如 26*37+5+2.5)
+               - 数字*数字+数字 (如 30*40+5)
+               - 数字*数字*数字 (如 52*38*67 或 30*40*50)
+               - 数字*数字 (如 50*70)
                - **注意**：如果遇到“防水袋”等中文名稱，其後緊跟數字規格，務必提取完整，且數字間用*號連接。
-            3. **排除干擾**：絕對不要提取“貨號”欄的內容。只提取“名稱及規格”欄下的手寫字。
-            4. **處理修改**：如果某行被明顯劃掉，請忽略。如果某行數據有塗改，提取最終看起來有效的數字，並將 'isPriceCertain' 設為 false 以提示人工復核。
-            5. **純淨輸出**：將所有乘號 'X' 或 'x' 統一轉為 '*'。`;
+            3. **排除干擾**：绝对不要提取“货号”栏的内容。只提取“名称及规格”栏下的手写字。
+            4. **处理修改**：如果某行被明显划掉，请忽略。如果某行数据有涂改，提取最终看起来有效的数字，并将 'isPriceCertain' 设为 false 以提示人工复核。
+            5. **纯淨輸出**：将所有乘號 'X' 或 'x' 統一轉為 '*'。`;
             
             // 用戶查詢 (User Query) - 具體任務
-            const userQuery = "請提取圖片中的送貨單號和有效送貨記錄。名稱及規格需包含中文名（如防水袋）和材質前綴。如果單價或數量有塗改嫌疑，請標記需查驗。";
+            const userQuery = "请提取图片中的送货单号和有效送货记录。名称及规格需包含中文名（如防水袋）和材质前缀。如果单价或数量有涂改嫌疑，请标记需查验。";
 
             const payload = {
                 contents: [
@@ -394,7 +399,7 @@
 
             try {
                 if (!appState.apiKey) {
-                    throw new Error("請先設定 API Key。");
+                    throw new Error("请先设置 API Key。");
                 }
                 
                 const response = await fetch(API_URL, {
@@ -406,7 +411,7 @@
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error(`API Request Failed (嘗試 ${attempt}): HTTP Status ${response.status}`, errorText);
-                    throw new Error(`AI 請求失敗。狀態碼: ${response.status}。請檢查 API Key 是否正確。`);
+                    throw new Error(`AI 请求失败。状态码: ${response.status}。请检查 API Key 是否正确。`);
                 }
 
                 const result = await response.json();
@@ -425,7 +430,7 @@
                         ? items.map(item => ({ ...item, deliveryNo })).filter(item => item && item.nameAndSpec) 
                         : [];
                 } else {
-                    throw new Error("模型返回了空內容或格式錯誤。");
+                    throw new Error("模型返回了空内容或格式错误。");
                 }
 
             } catch (error) {
@@ -461,8 +466,8 @@
                 const file = appState.files[i];
                 const fileNumber = i + 1;
                 
-                D.loadingMessage.textContent = `正在處理圖片 ${fileNumber} / ${totalFiles} (${file.name})...`;
-                showMessage(`開始處理第 ${fileNumber} 張圖片...`, 'info');
+                D.loadingMessage.textContent = `正在处理图片 ${fileNumber} / ${totalFiles} (${file.name})...`;
+                showMessage(`开始处理第 ${fileNumber} 张图片...`, 'info');
 
                 try {
                     const base64Data = await fileToBase64(file);
@@ -485,16 +490,23 @@
                         });
 
                         appState.extractedItems.push(...items);
-                        showMessage(`第 ${fileNumber} 張圖片處理成功，提取到 ${items.length} 條數據。`, 'success');
+                        showMessage(`第 ${fileNumber} 张图片处理成功，提取到 ${items.length} 条数据。`, 'success');
                     } else {
-                        showMessage(`第 ${fileNumber} 張圖片處理完成，但未提取到有效數據。`, 'info');
+                        showMessage(`第 ${fileNumber} 张图片处理完成，但未提取到有效数据。`, 'info');
                     }
 
                 } catch (error) {
-                    console.error(`處理文件 ${fileNumber} (${file.name}) 錯誤:`, error);
-                    showMessage(`第 ${fileNumber} 張圖片處理失敗: ${error.message}`, 'error');
+                    console.error(`处理文件 ${fileNumber} (${file.name}) 错误:`, error);
+                    showMessage(`第 ${fileNumber} 张图片处理失败: ${error.message}`, 'error');
                 }
             }
+            
+            // 3. 排序邏輯: 根據送貨單號從小到大排序
+            appState.extractedItems.sort((a, b) => {
+                const aNum = parseInt(a.deliveryNo) || 0;
+                const bNum = parseInt(b.deliveryNo) || 0;
+                return aNum - bNum; // 數字從小到大排序
+            });
 
             D.loadingIndicator.classList.add('hidden');
             appState.isProcessing = false;
@@ -505,10 +517,10 @@
                 renderTable(appState.extractedItems);
                 D.resultsSection.classList.remove('hidden');
                 D.exportButton.disabled = false;
-                showMessage(`所有文件處理完成！成功提取 ${appState.extractedItems.length} 條數據。`, 'success');
+                showMessage(`所有文件处理完成！成功提取 ${appState.extractedItems.length} 条数据。`, 'success');
             } else {
                 D.resultsSection.classList.add('hidden');
-                showMessage(`處理完畢。未能從 ${totalFiles} 個文件中提取到任何數據。`, 'info');
+                showMessage(`处理完毕。未能从 ${totalFiles} 个文件中提取到任何数据。`, 'info');
             }
         }
 
@@ -531,7 +543,7 @@
                 };
                 reader.readAsDataURL(firstFile);
                 
-                showMessage(`已選擇 ${appState.files.length} 張圖片，請點擊開始處理。`, 'info');
+                showMessage(`已选择 ${appState.files.length} 张图片，请点击开始处理。`, 'info');
             } else {
                 resetApp();
             }
