@@ -133,13 +133,12 @@
     </div>
 
     <script type="module">
+        // 官方最新推荐的 Flash 模型列表
         const ACTIVE_MODELS = [
+            "gemini-3.5-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite"
+            "gemini-2.5-flash-lite"
         ];
-        
-        let detectedModel = "";
 
         const appState = {
             apiKey: "",
@@ -203,13 +202,12 @@
             }
         });
 
-        // 保存 API Key（移除了强制 AIza 前缀限制，自动清除空格）
+        // 保存 API Key
         D.saveKeyButton.addEventListener('click', () => {
             const inputKey = D.apiKeyInput.value.replace(/\s+/g, '').trim();
             if (inputKey && inputKey.length >= 15) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
-                detectedModel = "";
                 showMainContent();
                 showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
@@ -221,7 +219,6 @@
             if(confirm('确定要清除本地保存的 API 密钥吗？清除后需要重新输入。')) {
                 localStorage.removeItem('GEMINI_API_KEY');
                 appState.apiKey = "";
-                detectedModel = "";
                 D.apiKeyInput.value = "";
                 resetApp();
                 showKeySetup();
@@ -258,29 +255,6 @@
             D.tableOutput.innerHTML = '';
             D.messageBox.classList.add('hidden');
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
-        }
-
-        async function getAvailableModel() {
-            if (detectedModel) return detectedModel;
-            try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${appState.apiKey}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const models = data.models || [];
-                    const found = models.find(m => 
-                        m.supportedGenerationMethods?.includes("generateContent") && 
-                        (m.name?.includes("2.5-flash") || m.name?.includes("2.0-flash") || m.name?.includes("flash"))
-                    );
-                    if (found) {
-                        detectedModel = found.name.replace(/^models\//, '');
-                        return detectedModel;
-                    }
-                }
-            } catch (e) {
-                console.warn("探测可用模型列表失败，使用默认模型:", e);
-            }
-            detectedModel = ACTIVE_MODELS[0];
-            return detectedModel;
         }
 
         function compressAndConvertToBase64(file, maxDimension = 1600, quality = 0.85) {
@@ -486,7 +460,7 @@
         }
 
         async function callGeminiAPI(base64Data, mimeType, modelIndex = 0) {
-            const modelName = modelIndex === 0 ? await getAvailableModel() : ACTIVE_MODELS[modelIndex];
+            const modelName = ACTIVE_MODELS[modelIndex];
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${appState.apiKey}`;
 
             const systemPrompt = `你是一个专业的送货单数据提取助手。请提取图片中的送货单号以及每一条货物的“名称及规格”、“单位”、“数量”、“单价”。
@@ -541,8 +515,9 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
+                    // 如果遇到 404，自动尝试下一个候选模型
                     if (response.status === 404 && modelIndex + 1 < ACTIVE_MODELS.length) {
-                        console.warn(`模型 ${modelName} 404，切换到 ${ACTIVE_MODELS[modelIndex + 1]}`);
+                        console.warn(`模型 ${modelName} 404，正在切换到 ${ACTIVE_MODELS[modelIndex + 1]}`);
                         return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
                     }
                     let errMsg = `HTTP ${response.status}`;
