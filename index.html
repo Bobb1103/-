@@ -39,8 +39,13 @@
             <h2 class="text-xl font-semibold text-yellow-800 mb-4">🔑 设置 API 密钥</h2>
             <p class="text-sm text-yellow-700 mb-4">为了保护您的账户安全，密钥将存储在您的本地浏览器中，不会上传到服务器。</p>
             <div class="flex flex-col gap-3">
-                <input type="password" id="apiKeyInput" placeholder="请输入您的 Gemini API Key (AIzaSy...)" 
-                    class="w-full p-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none">
+                <div class="relative">
+                    <input type="password" id="apiKeyInput" placeholder="请粘贴您的 Gemini API Key" 
+                        class="w-full p-3 pr-12 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none">
+                    <button type="button" id="toggleKeyVisible" class="absolute right-3 top-3 text-gray-500 hover:text-gray-700 text-sm">
+                        👁️
+                    </button>
+                </div>
                 <button id="saveKeyButton" class="w-full py-2 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition duration-150">
                     保存密钥并开始使用
                 </button>
@@ -128,11 +133,10 @@
     </div>
 
     <script type="module">
-        // 适配当前接口版本的候选模型列表
         const ACTIVE_MODELS = [
-            "gemini-3.5-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite"
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite"
         ];
         
         let detectedModel = "";
@@ -148,6 +152,7 @@
             app: document.getElementById('app'),
             apiKeySection: document.getElementById('apiKeySection'),
             apiKeyInput: document.getElementById('apiKeyInput'),
+            toggleKeyVisible: document.getElementById('toggleKeyVisible'),
             saveKeyButton: document.getElementById('saveKeyButton'),
             resetKeyButton: document.getElementById('resetKeyButton'),
             mainContent: document.getElementById('mainContent'),
@@ -169,8 +174,8 @@
 
         function initKeySystem() {
             const storedKey = localStorage.getItem('GEMINI_API_KEY');
-            if (storedKey) {
-                appState.apiKey = storedKey;
+            if (storedKey && storedKey.trim().length > 10) {
+                appState.apiKey = storedKey.trim();
                 showMainContent();
             } else {
                 showKeySetup();
@@ -187,16 +192,28 @@
             D.mainContent.classList.remove('hidden');
         }
 
+        // 明文/密文切换
+        D.toggleKeyVisible.addEventListener('click', () => {
+            if (D.apiKeyInput.type === 'password') {
+                D.apiKeyInput.type = 'text';
+                D.toggleKeyVisible.textContent = '🔒';
+            } else {
+                D.apiKeyInput.type = 'password';
+                D.toggleKeyVisible.textContent = '👁️';
+            }
+        });
+
+        // 保存 API Key（移除了强制 AIza 前缀限制，自动清除空格）
         D.saveKeyButton.addEventListener('click', () => {
-            const inputKey = D.apiKeyInput.value.trim();
-            if (inputKey && inputKey.startsWith('AIza')) {
+            const inputKey = D.apiKeyInput.value.replace(/\s+/g, '').trim();
+            if (inputKey && inputKey.length >= 15) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
                 detectedModel = "";
                 showMainContent();
                 showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
-                alert('请输入有效的 Gemini API Key (通常以 AIza 开头)');
+                alert('请输入有效的 API Key（密钥长度过短，请检查是否完整复制）');
             }
         });
 
@@ -243,7 +260,6 @@
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
-        // 自动发现 Key 下当前支持的模型
         async function getAvailableModel() {
             if (detectedModel) return detectedModel;
             try {
@@ -253,7 +269,7 @@
                     const models = data.models || [];
                     const found = models.find(m => 
                         m.supportedGenerationMethods?.includes("generateContent") && 
-                        (m.name?.includes("3.5-flash") || m.name?.includes("2.5-flash") || m.name?.includes("flash"))
+                        (m.name?.includes("2.5-flash") || m.name?.includes("2.0-flash") || m.name?.includes("flash"))
                     );
                     if (found) {
                         detectedModel = found.name.replace(/^models\//, '');
@@ -261,13 +277,12 @@
                     }
                 }
             } catch (e) {
-                console.warn("探测模型列表失败，使用预设新模型:", e);
+                console.warn("探测可用模型列表失败，使用默认模型:", e);
             }
             detectedModel = ACTIVE_MODELS[0];
             return detectedModel;
         }
 
-        // 图片压缩与 Base64 转换
         function compressAndConvertToBase64(file, maxDimension = 1600, quality = 0.85) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
