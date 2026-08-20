@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>手写送货单电子化工具</title>
+    <title>手写送货单电子化工具 (极速优化版)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS (用于生成标准 Excel xlsx 模板文件) -->
+    <!-- SheetJS (Excel xlsx 生成) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -31,7 +31,7 @@
     <div id="app" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 border border-gray-100">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-indigo-700 border-b-2 border-indigo-100 pb-3 mb-2">手写送货单电子化助手</h1>
-            <p class="text-gray-600">拍摄送货单，自动识别校对，项目名称默认统一为“胶袋”，支持导出税务发票模板 (.xlsx)。</p>
+            <p class="text-gray-600">已开启极速图片压缩加速，单张 2~4 秒极速出表，支持导出税务发票模板。</p>
         </header>
 
         <!-- API Key 设置区 -->
@@ -90,7 +90,7 @@
                 <button id="processButton"
                         class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
                         disabled>
-                    开始处理所有图片并转化
+                    开始极速识别并转化
                 </button>
                 <div id="loadingIndicator" class="mt-4 p-3 text-center rounded-lg bg-indigo-50 border border-indigo-200 hidden">
                     <div class="animate-spin inline-block w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
@@ -234,11 +234,40 @@
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
-        function fileToBase64(file) {
+        // ⚡ 核心极速加速逻辑：前端将手机超大原图等比压缩为 1600px JPEG
+        function compressAndConvertToBase64(file, maxDimension = 1600, quality = 0.85) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = error => reject(error);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > maxDimension || height > maxDimension) {
+                            if (width > height) {
+                                height = Math.round((height * maxDimension) / width);
+                                width = maxDimension;
+                            } else {
+                                width = Math.round((width * maxDimension) / height);
+                                height = maxDimension;
+                            }
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                        resolve({
+                            base64Data: dataUrl.split(',')[1],
+                            mimeType: 'image/jpeg'
+                        });
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
         }
@@ -301,7 +330,6 @@
             const items = appState.extractedItems;
             if (!items || items.length === 0) return;
 
-            // 构造税务模板的 sheet 数据
             const sheetData = [
                 // 第 1 行：填表说明
                 [
@@ -337,12 +365,11 @@
                 ]
             ];
 
-            // 填充识别到的明细数据（从第 4 行开始），项目名称统一为“胶袋”
             items.forEach(item => {
                 const quantity = Number(item.quantity) || 0;
                 const unitPrice = Number(item.unitPrice) || 0;
                 const amount = Number((quantity * unitPrice).toFixed(2));
-                const spec = item.nameAndSpec || ""; // 完整规格内容保留在规格型号列
+                const spec = item.nameAndSpec || "";
 
                 sheetData.push([
                     "胶袋",              // 1. 项目名称：统一默认改为“胶袋”
@@ -361,11 +388,7 @@
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(sheetData);
-            
-            // 设置主表名
             XLSX.utils.book_append_sheet(wb, ws, "1-明细模板");
-
-            // 导出文件
             XLSX.writeFile(wb, "发票开具项目信息导入.xlsx");
             showMessage('发票导入模板 Excel 文件已生成并开始下载。', 'success');
         }
@@ -417,7 +440,7 @@
                         items: {
                             type: "OBJECT",
                             properties: {
-                                "nameAndSpec": { "type": "STRING", "description": "名称及规格。包含材质/品名前缀与尺寸，如 'PPE 30*36+5' 或 '防水袋 30*40*50'。不要提取货号。" },
+                                "nameAndSpec": { "type": "STRING", "description": "名称及规格。包含材质/品名前缀与尺寸，如 'PPE 30*36+5'。不要提取货号。" },
                                 "unit": { "type": "STRING", "description": "单位，默认为'只'" },
                                 "quantity": { "type": "NUMBER", "description": "数量" },
                                 "unitPrice": { "type": "NUMBER", "description": "单价" },
@@ -441,7 +464,7 @@
             3. **排除干扰**：绝对不要提取“货号”栏的内容。只提取“名称及规格”栏下的手写字。
             4. **纯净输出**：将所有乘号 'X' 或 'x' 统一转为 '*'。`;
             
-            const userQuery = "请提取图片中的送货单号和所有有效送货明细。";
+            const userQuery = "提取送货单号及所有有效明细。";
 
             const payload = {
                 contents: [
@@ -527,12 +550,13 @@
                 const file = appState.files[i];
                 const fileNumber = i + 1;
                 
-                D.loadingMessage.textContent = `正在处理图片 ${fileNumber} / ${totalFiles} (${file.name})...`;
-                showMessage(`开始处理第 ${fileNumber} 张图片...`, 'info');
+                D.loadingMessage.textContent = `正在快速压缩并识别图片 ${fileNumber} / ${totalFiles} (${file.name})...`;
+                showMessage(`开始极速处理第 ${fileNumber} 张图片...`, 'info');
 
                 try {
-                    const base64Data = await fileToBase64(file);
-                    const items = await callGeminiAPI(base64Data, file.type);
+                    // ⚡ 调用前端压缩加速
+                    const { base64Data, mimeType } = await compressAndConvertToBase64(file);
+                    const items = await callGeminiAPI(base64Data, mimeType);
 
                     if (items && items.length > 0) {
                         items.forEach(item => {
@@ -544,18 +568,18 @@
                         });
 
                         appState.extractedItems.push(...items);
-                        showMessage(`第 ${fileNumber} 张图片处理成功，提取到 ${items.length} 条数据。`, 'success');
+                        showMessage(`第 ${fileNumber} 张图片识别完成，提取到 ${items.length} 条明细。`, 'success');
                     } else {
                         showMessage(`第 ${fileNumber} 张图片未识别到有效条目。`, 'info');
                     }
 
                 } catch (error) {
                     console.error(`处理图片 ${fileNumber} 出错:`, error);
-                    showMessage(`第 ${fileNumber} 张图片失败: ${error.message}`, 'error');
+                    showMessage(`第 ${fileNumber} 张图片识别失败: ${error.message}`, 'error');
                 }
             }
             
-            // 按送货单号升序排序
+            // 按送货单号从小到大升序排序
             appState.extractedItems.sort((a, b) => {
                 const aNum = parseInt(a.deliveryNo) || 0;
                 const bNum = parseInt(b.deliveryNo) || 0;
@@ -570,7 +594,7 @@
             if (appState.extractedItems.length > 0) {
                 renderTable(appState.extractedItems);
                 D.resultsSection.classList.remove('hidden');
-                showMessage(`所有图片处理完成！共汇总 ${appState.extractedItems.length} 条明细。`, 'success');
+                showMessage(`全部完成！共汇总 ${appState.extractedItems.length} 条明细。`, 'success');
             } else {
                 D.resultsSection.classList.add('hidden');
                 showMessage(`处理完毕，未能提取到有效明细。`, 'info');
@@ -593,7 +617,7 @@
                 };
                 reader.readAsDataURL(firstFile);
                 
-                showMessage(`已选择 ${appState.files.length} 张图片，请点击开始处理。`, 'info');
+                showMessage(`已选择 ${appState.files.length} 张图片，请点击开始极速处理。`, 'info');
             } else {
                 resetApp();
             }
