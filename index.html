@@ -31,7 +31,7 @@
     <div id="app" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 border border-gray-100">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-indigo-700 border-b-2 border-indigo-100 pb-3 mb-2">手写送货单电子化助手</h1>
-            <p class="text-gray-600">拍摄送货单，自动识别校对，支持一键导出税务发票导入模板 (.xlsx)。</p>
+            <p class="text-gray-600">拍摄送货单，自动识别校对，项目名称默认统一为“胶袋”，支持导出税务发票模板 (.xlsx)。</p>
         </header>
 
         <!-- API Key 设置区 -->
@@ -243,17 +243,6 @@
             });
         }
 
-        // 解析名称与规格：将 "PPE 30*36+5" 拆分为 品名="PPE", 规格="30*36+5"
-        function splitNameAndSpec(nameAndSpec) {
-            const raw = (nameAndSpec || '').trim();
-            // 匹配规格起始部分（数字开头，或带 * + x 等计算符号）
-            const match = raw.match(/^([^\d*+xX]+)?\s*([\d.*+xX\-\/\s]+.*)?$/);
-            let itemName = match && match[1] ? match[1].trim() : '包装袋';
-            let spec = match && match[2] ? match[2].trim() : raw;
-            if (!itemName) itemName = '包装袋';
-            return { itemName, spec };
-        }
-
         function renderTable(items) {
             if (!items || items.length === 0) {
                 D.tableOutput.innerHTML = '<p class="text-center text-gray-500 p-4">未提取到任何有效数据。</p>';
@@ -265,7 +254,8 @@
                     <thead class="bg-indigo-100">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">送货单号</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">名称及规格</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">开票品名</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">规格型号</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">单位</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">数量</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">单价</th>
@@ -291,7 +281,8 @@
                 html += `
                     <tr class="${rowClass} hover:bg-indigo-50 transition duration-150">
                         <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-blue-600">${item.deliveryNo || '-'}</td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-800">${item.nameAndSpec || '-'}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-800">胶袋</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-700">${item.nameAndSpec || '-'}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${item.unit || '只'}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">${quantity}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-right ${priceClass}">${priceDisplay}</td>
@@ -346,16 +337,16 @@
                 ]
             ];
 
-            // 填充识别到的明细数据（从第 4 行开始）
+            // 填充识别到的明细数据（从第 4 行开始），项目名称统一为“胶袋”
             items.forEach(item => {
-                const { itemName, spec } = splitNameAndSpec(item.nameAndSpec);
                 const quantity = Number(item.quantity) || 0;
                 const unitPrice = Number(item.unitPrice) || 0;
                 const amount = Number((quantity * unitPrice).toFixed(2));
+                const spec = item.nameAndSpec || ""; // 完整规格内容保留在规格型号列
 
                 sheetData.push([
-                    itemName,            // 1. 项目名称
-                    "",                  // 2. 商品和服务税收分类编码（若系统已维护可留空）
+                    "胶袋",              // 1. 项目名称：统一默认改为“胶袋”
+                    "",                  // 2. 商品和服务税收分类编码
                     spec,                // 3. 规格型号
                     item.unit || "只",   // 4. 单位
                     quantity,            // 5. 商品数量
@@ -382,7 +373,7 @@
         // 常规 CSV 下载
         function downloadCSV() {
             const items = appState.extractedItems;
-            const headers = ["送货单号", "名称及规格", "单位", "数量", "单价", "金额"];
+            const headers = ["送货单号", "项目名称", "规格型号", "单位", "数量", "单价", "金额"];
             let csv = headers.join(',') + '\n';
 
             items.forEach(item => {
@@ -391,6 +382,7 @@
                 const amt = (qty * price).toFixed(2);
                 const row = [
                     `"${String(item.deliveryNo || '-').replace(/"/g, '""')}"`,
+                    `"胶袋"`,
                     `"${String(item.nameAndSpec || '-').replace(/"/g, '""')}"`, 
                     String(item.unit || '只'),
                     String(qty),
