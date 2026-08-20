@@ -5,23 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>手写送货单电子化工具</title>
     
-    <!-- 載入 Tailwind CSS 框架 -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (用于生成标准 Excel xlsx 模板文件) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
             font-family: 'Inter', 'Microsoft YaHei', sans-serif;
-            background-color: #f7f9fb; /* 浅灰色背景 */
+            background-color: #f7f9fb;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             padding: 20px;
         }
-        /* 优化输入框和按钮的焦点效果 */
-        input:focus, button:focus {
+        input:focus, button:focus, select:focus {
             outline: none;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); /* indigo-500 */
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
         }
     </style>
 </head>
@@ -30,10 +31,10 @@
     <div id="app" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 border border-gray-100">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-indigo-700 border-b-2 border-indigo-100 pb-3 mb-2">手写送货单电子化助手</h1>
-            <p class="text-gray-600">拍摄手写送货单，自动识别并合并为电子表格。</p>
+            <p class="text-gray-600">拍摄送货单，自动识别校对，支持一键导出税务发票导入模板 (.xlsx)。</p>
         </header>
 
-        <!-- API Key 设置区 (当 Key 丢失时显示) -->
+        <!-- API Key 设置区 -->
         <section id="apiKeySection" class="mb-8 p-6 bg-yellow-50 border border-yellow-300 rounded-lg shadow-inner hidden">
             <h2 class="text-xl font-semibold text-yellow-800 mb-4">🔑 设置 API 密钥</h2>
             <p class="text-sm text-yellow-700 mb-4">为了保护您的账户安全，密钥将存储在您的本地浏览器中，不会上传到服务器。</p>
@@ -46,17 +47,25 @@
             </div>
         </section>
 
-        <!-- 主要应用内容 (设置 Key 后显示) -->
+        <!-- 主要应用内容 -->
         <div id="mainContent" class="hidden">
             
-            <!-- 密鑰管理 (重置連結) -->
-            <div class="flex justify-end mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <label for="taxRateSelect" class="text-xs font-semibold text-gray-600">发票默认税率：</label>
+                    <select id="taxRateSelect" class="text-xs border border-gray-300 rounded px-2 py-1 bg-white">
+                        <option value="0.13">13% (0.13)</option>
+                        <option value="0.03">3% (0.03)</option>
+                        <option value="0.01">1% (0.01)</option>
+                        <option value="0">免税/0% (0)</option>
+                    </select>
+                </div>
                 <button id="resetKeyButton" class="text-xs text-gray-400 hover:text-indigo-600 underline transition duration-150">
                     重置/更换 API 密钥
                 </button>
             </div>
 
-            <!-- 步骤 1: 圖片上傳 -->
+            <!-- 步骤 1: 图片上传 -->
             <section class="mb-8 p-6 bg-indigo-50 border border-indigo-200 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold text-indigo-800 mb-4">第一步：上传手写送货单照片 (可多选)</h2>
                 <div class="flex flex-col sm:flex-row gap-4">
@@ -76,7 +85,7 @@
                 </div>
             </section>
 
-            <!-- 步驟 2: 處理與指示 -->
+            <!-- 步骤 2: 处理与指示 -->
             <section class="mb-8">
                 <button id="processButton"
                         class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
@@ -84,28 +93,33 @@
                     开始处理所有图片并转化
                 </button>
                 <div id="loadingIndicator" class="mt-4 p-3 text-center rounded-lg bg-indigo-50 border border-indigo-200 hidden">
-                    <div class="animate-spin inline-block w-5 h-5 border-3 border-indigo-500 border-t-transparent rounded-full"></div>
+                    <div class="animate-spin inline-block w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
                     <span id="loadingMessage" class="ml-3 text-indigo-600 font-medium">正在读取图片 1 / 0，请稍候...</span>
                 </div>
                 <div id="messageBox" class="mt-4 p-3 rounded-lg text-sm font-medium hidden"></div>
             </section>
 
-            <!-- 步驟 3: 結果與匯出 -->
+            <!-- 步骤 3: 结果与导出 -->
             <section id="resultsSection" class="hidden">
                 <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">📦 汇总识别结果表格 (已按单号排序)</h2>
                 
                 <div id="tableOutput" class="overflow-x-auto mb-4 border border-gray-200 rounded-lg shadow-md">
-                    <!-- 表格內容將在此處渲染 -->
+                    <!-- 表格内容 -->
                 </div>
 
-                <button id="exportButton"
-                        class="w-full py-2 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition duration-150 disabled:opacity-50"
-                        disabled>
-                    ⬇️ 下载 CSV 文件 (Excel 格式)
-                </button>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button id="exportExcelButton"
+                            class="flex-1 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 shadow-md">
+                        📊 导出税务发票模板 (发票开具项目信息导入.xlsx)
+                    </button>
+                    <button id="exportCsvButton"
+                            class="py-3 px-6 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition duration-150">
+                        ⬇️ 导出常规 CSV
+                    </button>
+                </div>
             </section>
 
-            <!-- 步驟 4: 預覽 -->
+            <!-- 步骤 4: 预览 -->
             <section id="previewSection" class="mt-8 border-t border-gray-200 pt-6 hidden">
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">首张图片预览</h2>
                 <img id="imagePreview" class="max-w-full h-auto rounded-lg shadow-lg border border-gray-300" />
@@ -114,18 +128,15 @@
     </div>
 
     <script type="module">
-        // --- 設定與配置 ---
-        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        const MODEL_NAME = "gemini-1.5-flash";
         
-        // 應用狀態儲存
         const appState = {
-            apiKey: "", // API 密鑰，從 LocalStorage 讀取
-            files: [], // 上傳的文件列表
-            extractedItems: [], // 提取的總數據列表
-            isProcessing: false, // 處理狀態標記
+            apiKey: "",
+            files: [],
+            extractedItems: [],
+            isProcessing: false,
         };
 
-        // DOM 元素參考
         const D = {
             app: document.getElementById('app'),
             apiKeySection: document.getElementById('apiKeySection'),
@@ -133,6 +144,7 @@
             saveKeyButton: document.getElementById('saveKeyButton'),
             resetKeyButton: document.getElementById('resetKeyButton'),
             mainContent: document.getElementById('mainContent'),
+            taxRateSelect: document.getElementById('taxRateSelect'),
             
             imageInput: document.getElementById('imageInput'),
             clearImageButton: document.getElementById('clearImageButton'),
@@ -140,23 +152,21 @@
             loadingIndicator: document.getElementById('loadingIndicator'),
             loadingMessage: document.getElementById('loadingMessage'),
             tableOutput: document.getElementById('tableOutput'),
-            exportButton: document.getElementById('exportButton'),
+            exportExcelButton: document.getElementById('exportExcelButton'),
+            exportCsvButton: document.getElementById('exportCsvButton'),
             messageBox: document.getElementById('messageBox'),
             resultsSection: document.getElementById('resultsSection'),
             imagePreview: document.getElementById('imagePreview'),
             previewSection: document.getElementById('previewSection'),
         };
 
-        // --- 密鑰管理邏輯 (Local Storage) ---
-        
         function initKeySystem() {
-            // 檢查本地儲存中是否有密鑰
             const storedKey = localStorage.getItem('GEMINI_API_KEY');
             if (storedKey) {
                 appState.apiKey = storedKey;
-                showMainContent(); // 如果有密鑰，顯示主內容
+                showMainContent();
             } else {
-                showKeySetup(); // 如果沒有，顯示密鑰設定區
+                showKeySetup();
             }
         }
 
@@ -172,7 +182,6 @@
 
         D.saveKeyButton.addEventListener('click', () => {
             const inputKey = D.apiKeyInput.value.trim();
-            // 簡單驗證密鑰格式 (Gemini Keys usually start with AIza)
             if (inputKey && inputKey.startsWith('AIza')) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
@@ -185,20 +194,16 @@
 
         D.resetKeyButton.addEventListener('click', () => {
             if(confirm('确定要清除本地保存的 API 密钥吗？清除后需要重新输入。')) {
-                localStorage.removeItem('GEMINI_API_KEY'); // 从本地儲存中移除
+                localStorage.removeItem('GEMINI_API_KEY');
                 appState.apiKey = "";
                 D.apiKeyInput.value = "";
-                resetApp(); // 重置應用狀態
-                showKeySetup(); // 顯示密鑰設定區
+                resetApp();
+                showKeySetup();
             }
         });
 
-        // --- 輔助函數 ---
-
-        // 顯示訊息框
         function showMessage(message, type = 'info') {
             D.messageBox.textContent = message;
-            // 移除所有類別並根據 type 添加顏色
             D.messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
 
             if (type === 'error') {
@@ -211,7 +216,6 @@
             D.messageBox.classList.remove('hidden');
         }
 
-        // 重置應用狀態
         function resetApp() {
             appState.files = [];
             appState.extractedItems = [];
@@ -220,7 +224,6 @@
             D.imageInput.value = '';
             D.processButton.disabled = true;
             D.clearImageButton.disabled = true;
-            D.exportButton.disabled = true;
             
             D.previewSection.classList.add('hidden');
             D.resultsSection.classList.add('hidden');
@@ -231,7 +234,6 @@
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
-        // 將 File 轉換為 Base64
         function fileToBase64(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -241,59 +243,47 @@
             });
         }
 
-        // --- 數據處理與渲染 ---
-
-        // 轉換為 CSV 格式 (包含送貨單號)
-        function toCSV(items) {
-            // CSV 標頭: 送貨單號, 名稱及規格, 單位, 數量, 單價
-            const headers = ["送货单号", "名称及规格", "单位", "数量", "单价"];
-            let csv = headers.join(',') + '\n';
-
-            items.forEach(item => {
-                const row = [
-                    `"${String(item.deliveryNo || '-').replace(/"/g, '""')}"`, // 送貨單號
-                    `"${String(item.nameAndSpec || '-').replace(/"/g, '""')}"`, // 名稱及規格
-                    String(item.unit || '只'), // 單位 (預設為 '只')
-                    String(item.quantity || 0), // 數量
-                    String(item.unitPrice || 0) // 單價
-                ];
-                csv += row.join(',') + '\n';
-            });
-
-            return csv.trim();
+        // 解析名称与规格：将 "PPE 30*36+5" 拆分为 品名="PPE", 规格="30*36+5"
+        function splitNameAndSpec(nameAndSpec) {
+            const raw = (nameAndSpec || '').trim();
+            // 匹配规格起始部分（数字开头，或带 * + x 等计算符号）
+            const match = raw.match(/^([^\d*+xX]+)?\s*([\d.*+xX\-\/\s]+.*)?$/);
+            let itemName = match && match[1] ? match[1].trim() : '包装袋';
+            let spec = match && match[2] ? match[2].trim() : raw;
+            if (!itemName) itemName = '包装袋';
+            return { itemName, spec };
         }
 
-        // 渲染 HTML 表格 (包含送貨單號)
         function renderTable(items) {
             if (!items || items.length === 0) {
                 D.tableOutput.innerHTML = '<p class="text-center text-gray-500 p-4">未提取到任何有效数据。</p>';
                 return;
             }
 
-            // 表格標頭：第一欄是送貨單號
             let html = `
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-indigo-100">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider rounded-tl-lg">送货单号</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">送货单号</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">名称及规格</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold text-indigo-700 uppercase tracking-wider">单位</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">数量</th>
-                            <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider rounded-tr-lg">单价</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">单价</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-indigo-700 uppercase tracking-wider">金额</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
             `;
 
             items.forEach((item, index) => {
-                const quantity = item.quantity || 0;
-                const unitPrice = item.unitPrice || 0;
-                const priceDisplay = typeof unitPrice === 'number' ? `¥${unitPrice.toFixed(2)}` : '-';
+                const quantity = Number(item.quantity) || 0;
+                const unitPrice = Number(item.unitPrice) || 0;
+                const totalAmount = (quantity * unitPrice).toFixed(2);
+                const priceDisplay = `¥${unitPrice.toFixed(2)}`;
                 
                 let priceClass = "text-gray-700";
                 let rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 
-                // 如果 isPriceCertain 為 false，則標紅
                 if (item.isPriceCertain === false) {
                      priceClass = "text-red-700 font-bold bg-red-100 rounded px-1";
                 }
@@ -305,6 +295,7 @@
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${item.unit || '只'}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-gray-700">${quantity}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-right ${priceClass}">${priceDisplay}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-right text-indigo-600 font-semibold">¥${totalAmount}</td>
                     </tr>
                 `;
             });
@@ -313,11 +304,104 @@
             D.tableOutput.innerHTML = html;
         }
 
-        // 下載 CSV 檔案
+        // 导出符合税务模板的 Excel 文件 (.xlsx)
+        function downloadTaxExcel() {
+            const taxRate = D.taxRateSelect.value;
+            const items = appState.extractedItems;
+            if (!items || items.length === 0) return;
+
+            // 构造税务模板的 sheet 数据
+            const sheetData = [
+                // 第 1 行：填表说明
+                [
+                    "填表说明：\n1、项目名称：无需写商品和服务税收分类简称（*号以及中间内容）。\n2、导入前请在电子税务局【开票业务】-【开票信息维护】中对开具的项目信息进行维护，或在导入模板中填写“商品与服务税收分类编码”。\n3、数量、单价可任填其中一项，或者仅填金额；如果三项均填写，导入后系统将默认以填写的数量*单价=金额进行误差校验；\n商品单价、商品数量：小数点后最多保留13位小数；\n金额：小数点后最多保留2位小数。"
+                ],
+                // 第 2 行：格式限制
+                [
+                    "必填\n(限100字符)",
+                    "非必填\n(限19字符)",
+                    "非必填\n(限40字符)",
+                    "非必填\n(限20字符)",
+                    "非必填\n(限16字符)",
+                    "非必填\n(限16字符)\t",
+                    "必填\n(限18字符)\n(保留两位小数)",
+                    "必填\n(以小数后两位形式填写，如“0.13”代\n表税率13%)",
+                    "非必填\n(限18字符)\n保留两位小数",
+                    "非必填\n（限15字符)",
+                    "非必填\n（限15字符)   "
+                ],
+                // 第 3 行：表头
+                [
+                    "项目名称",
+                    "商品和服务税收分类编码",
+                    "规格型号",
+                    "单位",
+                    "商品数量",
+                    "商品单价",
+                    "金额",
+                    "税率",
+                    "折扣金额",
+                    "优惠政策类型",
+                    "煤炭种类"
+                ]
+            ];
+
+            // 填充识别到的明细数据（从第 4 行开始）
+            items.forEach(item => {
+                const { itemName, spec } = splitNameAndSpec(item.nameAndSpec);
+                const quantity = Number(item.quantity) || 0;
+                const unitPrice = Number(item.unitPrice) || 0;
+                const amount = Number((quantity * unitPrice).toFixed(2));
+
+                sheetData.push([
+                    itemName,            // 1. 项目名称
+                    "",                  // 2. 商品和服务税收分类编码（若系统已维护可留空）
+                    spec,                // 3. 规格型号
+                    item.unit || "只",   // 4. 单位
+                    quantity,            // 5. 商品数量
+                    unitPrice,           // 6. 商品单价
+                    amount,              // 7. 金额
+                    taxRate,             // 8. 税率
+                    "",                  // 9. 折扣金额
+                    taxRate === "0" ? "免税" : "", // 10. 优惠政策类型
+                    ""                   // 11. 煤炭种类
+                ]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            
+            // 设置主表名
+            XLSX.utils.book_append_sheet(wb, ws, "1-明细模板");
+
+            // 导出文件
+            XLSX.writeFile(wb, "发票开具项目信息导入.xlsx");
+            showMessage('发票导入模板 Excel 文件已生成并开始下载。', 'success');
+        }
+
+        // 常规 CSV 下载
         function downloadCSV() {
-            const csvData = toCSV(appState.extractedItems);
-            const bom = "\ufeff"; // BOM (Byte Order Mark) 確保 Excel 正確顯示中文
-            const blob = new Blob([bom + csvData], { type: 'text/csv;charset=utf-8;' });
+            const items = appState.extractedItems;
+            const headers = ["送货单号", "名称及规格", "单位", "数量", "单价", "金额"];
+            let csv = headers.join(',') + '\n';
+
+            items.forEach(item => {
+                const qty = Number(item.quantity) || 0;
+                const price = Number(item.unitPrice) || 0;
+                const amt = (qty * price).toFixed(2);
+                const row = [
+                    `"${String(item.deliveryNo || '-').replace(/"/g, '""')}"`,
+                    `"${String(item.nameAndSpec || '-').replace(/"/g, '""')}"`, 
+                    String(item.unit || '只'),
+                    String(qty),
+                    String(price),
+                    String(amt)
+                ];
+                csv += row.join(',') + '\n';
+            });
+
+            const bom = "\ufeff";
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.setAttribute('href', url);
@@ -325,53 +409,47 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showMessage('CSV 檔案已生成并开始下载。', 'success');
+            showMessage('CSV 文件已生成并开始下载。', 'success');
         }
 
-        // --- Gemini API 核心邏輯 ---
-
-        // 呼叫 Gemini API 進行圖片識別
         async function callGeminiAPI(base64Data, mimeType, attempt = 1) {
             const MAX_RETRIES = 5;
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${appState.apiKey}`;
 
-            // 結構化 JSON 輸出的 Schema
             const itemSchema = {
                 type: "OBJECT",
                 properties: {
-                    "deliveryNo": { "type": "STRING", "description": "送货单号 (No)" }, // 提取送货单号
+                    "deliveryNo": { "type": "STRING", "description": "送货单号 (No)" },
                     "items": {
                         type: "ARRAY",
                         items: {
                             type: "OBJECT",
                             properties: {
-                                "nameAndSpec": { "type": "STRING", "description": "名称及规格。仅提取'名称及规格'栏下的内容，包含材质前缀(如PE,OPP)和尺寸。不要提取'货号'栏的内容。如果规格是数字，请用*号连接，如 30*40+5。" },
+                                "nameAndSpec": { "type": "STRING", "description": "名称及规格。包含材质/品名前缀与尺寸，如 'PPE 30*36+5' 或 '防水袋 30*40*50'。不要提取货号。" },
+                                "unit": { "type": "STRING", "description": "单位，默认为'只'" },
                                 "quantity": { "type": "NUMBER", "description": "数量" },
                                 "unitPrice": { "type": "NUMBER", "description": "单价" },
-                                "isPriceCertain": { "type": "BOOLEAN", "description": "如果单价数字因涂改、模糊、划线修改等原因难以辨认，设为false，否则为true。" }
+                                "isPriceCertain": { "type": "BOOLEAN", "description": "单价是否有涂改、交叉线等不确定情况" }
                             },
                             required: ["nameAndSpec", "quantity", "unitPrice", "isPriceCertain"]
                         }
                     }
                 },
-                required: ["deliveryNo", "items"] // 要求必須有送貨單號和項目列表
+                required: ["deliveryNo", "items"]
             };
 
-            // 系統指令 (System Prompt) - 告訴模型如何扮演
-            const systemPrompt = `你是一個專業的送貨單數據提取助手。
-            1. **目標**：提取"送货单号"以及列表中的“名称及规格”、“数量”、“单价”。默认单位为“只”。
+            const systemPrompt = `你是一个专业的送货单数据提取助手。
+            1. **目标**：提取"送货单号"以及列表中的“名称及规格”、“单位”、“数量”、“单价”。
             2. **规格格式**：
-               - 数字*数字+数字+数字.数字 (如 26*37+5+2.5)
+               - 数字*数字+数字+数字.数字 (如 26.5*37+5+2.5)
                - 数字*数字+数字 (如 30*40+5)
-               - 数字*数字*数字 (如 52*38*67 或 30*40*50)
+               - 数字*数字*数字 (如 30*40*50)
                - 数字*数字 (如 50*70)
-               - **注意**：如果遇到“防水袋”等中文名稱，其後緊跟數字規格，務必提取完整，且數字間用*號連接。
-            3. **排除干擾**：绝对不要提取“货号”栏的内容。只提取“名称及规格”栏下的手写字。
-            4. **处理修改**：如果某行被明显划掉，请忽略。如果某行数据有涂改，提取最终看起来有效的数字，并将 'isPriceCertain' 设为 false 以提示人工复核。
-            5. **纯淨輸出**：将所有乘號 'X' 或 'x' 統一轉為 '*'。`;
+               - 包含品名前缀（如 PPE、OPP、防水袋、FPP 双印、鸡内金等）。
+            3. **排除干扰**：绝对不要提取“货号”栏的内容。只提取“名称及规格”栏下的手写字。
+            4. **纯净输出**：将所有乘号 'X' 或 'x' 统一转为 '*'。`;
             
-            // 用戶查詢 (User Query) - 具體任務
-            const userQuery = "请提取图片中的送货单号和有效送货记录。名称及规格需包含中文名（如防水袋）和材质前缀。如果单价或数量有涂改嫌疑，请标记需查验。";
+            const userQuery = "请提取图片中的送货单号和所有有效送货明细。";
 
             const payload = {
                 contents: [
@@ -398,9 +476,7 @@
             };
 
             try {
-                if (!appState.apiKey) {
-                    throw new Error("请先设置 API Key。");
-                }
+                if (!appState.apiKey) throw new Error("请先设置 API Key。");
                 
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -410,8 +486,8 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error(`API Request Failed (嘗試 ${attempt}): HTTP Status ${response.status}`, errorText);
-                    throw new Error(`AI 请求失败。状态码: ${response.status}。请检查 API Key 是否正确。`);
+                    console.error(`API Request Failed (Attempt ${attempt}): HTTP Status ${response.status}`, errorText);
+                    throw new Error(`AI 请求失败 (状态码: ${response.status})。请检查 Key 或网络。`);
                 }
 
                 const result = await response.json();
@@ -420,32 +496,26 @@
                 if (candidate && candidate.content?.parts?.[0]?.text) {
                     const jsonString = candidate.content.parts[0].text;
                     const cleanedJsonString = jsonString.replace(/^```json\s*|```\s*$/g, '').trim();
-                    
                     const resultData = JSON.parse(cleanedJsonString);
                     const deliveryNo = resultData.deliveryNo || "";
                     const items = resultData.items || [];
 
-                    // 將送貨單號附加到每個項目上，方便在平面表格中顯示
                     return Array.isArray(items) 
                         ? items.map(item => ({ ...item, deliveryNo })).filter(item => item && item.nameAndSpec) 
                         : [];
                 } else {
-                    throw new Error("模型返回了空内容或格式错误。");
+                    throw new Error("模型返回空内容。");
                 }
 
             } catch (error) {
-                // 實作指數退避重試
                 if (attempt < MAX_RETRIES) {
                     const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-                    console.warn(`API 呼叫失敗。將在 ${Math.round(delay / 1000)} 秒後重試... (嘗試 ${attempt}/${MAX_RETRIES})`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     return callGeminiAPI(base64Data, mimeType, attempt + 1);
                 }
-                throw new Error("API 呼叫最終失敗。詳細信息: " + error.message);
+                throw error;
             }
         }
-
-        // --- 主要處理邏輯 ---
 
         async function handleProcessAll() {
             if (appState.isProcessing || appState.files.length === 0) return;
@@ -454,7 +524,6 @@
             appState.extractedItems = [];
             D.processButton.disabled = true;
             D.clearImageButton.disabled = true;
-            D.exportButton.disabled = true;
             D.resultsSection.classList.add('hidden');
             D.tableOutput.innerHTML = '';
             D.loadingIndicator.classList.remove('hidden');
@@ -471,20 +540,13 @@
 
                 try {
                     const base64Data = await fileToBase64(file);
-                    const mimeType = file.type;
-                    
-                    const items = await callGeminiAPI(base64Data, mimeType);
+                    const items = await callGeminiAPI(base64Data, file.type);
 
                     if (items && items.length > 0) {
-                        // 客戶端後處理修正：修復防水袋規格乘號丟失問題
                         items.forEach(item => {
                             if (item.nameAndSpec && item.nameAndSpec.includes('防水袋')) {
-                                // 啟發式規則: 如果規格是 6 位數字連在一起且沒有 * 號，則強制插入 *
                                 item.nameAndSpec = item.nameAndSpec.replace(/(\d{2})(\d{2})(\d{2})/g, (match, p1, p2, p3) => {
-                                    if (!match.includes('*')) {
-                                        return `${p1}*${p2}*${p3}`;
-                                    }
-                                    return match;
+                                    return match.includes('*') ? match : `${p1}*${p2}*${p3}`;
                                 });
                             }
                         });
@@ -492,20 +554,20 @@
                         appState.extractedItems.push(...items);
                         showMessage(`第 ${fileNumber} 张图片处理成功，提取到 ${items.length} 条数据。`, 'success');
                     } else {
-                        showMessage(`第 ${fileNumber} 张图片处理完成，但未提取到有效数据。`, 'info');
+                        showMessage(`第 ${fileNumber} 张图片未识别到有效条目。`, 'info');
                     }
 
                 } catch (error) {
-                    console.error(`处理文件 ${fileNumber} (${file.name}) 错误:`, error);
-                    showMessage(`第 ${fileNumber} 张图片处理失败: ${error.message}`, 'error');
+                    console.error(`处理图片 ${fileNumber} 出错:`, error);
+                    showMessage(`第 ${fileNumber} 张图片失败: ${error.message}`, 'error');
                 }
             }
             
-            // 3. 排序邏輯: 根據送貨單號從小到大排序
+            // 按送货单号升序排序
             appState.extractedItems.sort((a, b) => {
                 const aNum = parseInt(a.deliveryNo) || 0;
                 const bNum = parseInt(b.deliveryNo) || 0;
-                return aNum - bNum; // 數字從小到大排序
+                return aNum - bNum;
             });
 
             D.loadingIndicator.classList.add('hidden');
@@ -516,15 +578,12 @@
             if (appState.extractedItems.length > 0) {
                 renderTable(appState.extractedItems);
                 D.resultsSection.classList.remove('hidden');
-                D.exportButton.disabled = false;
-                showMessage(`所有文件处理完成！成功提取 ${appState.extractedItems.length} 条数据。`, 'success');
+                showMessage(`所有图片处理完成！共汇总 ${appState.extractedItems.length} 条明细。`, 'success');
             } else {
                 D.resultsSection.classList.add('hidden');
-                showMessage(`处理完毕。未能从 ${totalFiles} 个文件中提取到任何数据。`, 'info');
+                showMessage(`处理完毕，未能提取到有效明细。`, 'info');
             }
         }
-
-        // --- 事件監聽器 ---
 
         D.imageInput.addEventListener('change', (event) => {
             appState.files = Array.from(event.target.files);
@@ -534,7 +593,6 @@
                 D.processButton.disabled = false;
                 D.clearImageButton.disabled = false;
                 
-                // 預覽第一張圖
                 const firstFile = appState.files[0];
                 const reader = new FileReader();
                 reader.onload = (e) => {
@@ -549,15 +607,11 @@
             }
         });
 
-        D.clearImageButton.addEventListener('click', () => {
-            resetApp();
-        });
-
+        D.clearImageButton.addEventListener('click', resetApp);
         D.processButton.addEventListener('click', handleProcessAll);
+        D.exportExcelButton.addEventListener('click', downloadTaxExcel);
+        D.exportCsvButton.addEventListener('click', downloadCSV);
 
-        D.exportButton.addEventListener('click', downloadCSV);
-
-        // --- 初始化 ---
         document.addEventListener('DOMContentLoaded', initKeySystem);
     </script>
 </body>
