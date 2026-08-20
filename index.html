@@ -128,16 +128,14 @@
     </div>
 
     <script type="module">
-        // 候选模型列表 (按优先级排序)
-        const FALLBACK_MODELS = [
+        // 适配当前接口版本的候选模型列表
+        const ACTIVE_MODELS = [
+            "gemini-3.5-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash-8b"
+            "gemini-2.5-flash-lite"
         ];
         
-        let detectedModel = ""; // 动态检测到的有效模型
+        let detectedModel = "";
 
         const appState = {
             apiKey: "",
@@ -194,7 +192,7 @@
             if (inputKey && inputKey.startsWith('AIza')) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
-                detectedModel = ""; // 重置检测缓存
+                detectedModel = "";
                 showMainContent();
                 showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
@@ -245,7 +243,7 @@
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
-        // 自动发现 Key 下当前可用的模型
+        // 自动发现 Key 下当前支持的模型
         async function getAvailableModel() {
             if (detectedModel) return detectedModel;
             try {
@@ -253,20 +251,19 @@
                 if (res.ok) {
                     const data = await res.json();
                     const models = data.models || [];
-                    // 优先挑选支持 generateContent 且带 flash 的模型
-                    const flashModel = models.find(m => 
+                    const found = models.find(m => 
                         m.supportedGenerationMethods?.includes("generateContent") && 
-                        m.name?.includes("flash")
+                        (m.name?.includes("3.5-flash") || m.name?.includes("2.5-flash") || m.name?.includes("flash"))
                     );
-                    if (flashModel) {
-                        detectedModel = flashModel.name.replace(/^models\//, '');
+                    if (found) {
+                        detectedModel = found.name.replace(/^models\//, '');
                         return detectedModel;
                     }
                 }
             } catch (e) {
-                console.warn("自动获取模型列表失败，将使用默认候选模型:", e);
+                console.warn("探测模型列表失败，使用预设新模型:", e);
             }
-            detectedModel = FALLBACK_MODELS[0];
+            detectedModel = ACTIVE_MODELS[0];
             return detectedModel;
         }
 
@@ -474,7 +471,7 @@
         }
 
         async function callGeminiAPI(base64Data, mimeType, modelIndex = 0) {
-            const modelName = modelIndex === 0 ? await getAvailableModel() : FALLBACK_MODELS[modelIndex];
+            const modelName = modelIndex === 0 ? await getAvailableModel() : ACTIVE_MODELS[modelIndex];
             const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${appState.apiKey}`;
 
             const systemPrompt = `你是一个专业的送货单数据提取助手。请提取图片中的送货单号以及每一条货物的“名称及规格”、“单位”、“数量”、“单价”。
@@ -529,9 +526,8 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    // 如果 404，尝试后备模型
-                    if (response.status === 404 && modelIndex + 1 < FALLBACK_MODELS.length) {
-                        console.warn(`模型 ${modelName} 404，切换到 ${FALLBACK_MODELS[modelIndex + 1]}`);
+                    if (response.status === 404 && modelIndex + 1 < ACTIVE_MODELS.length) {
+                        console.warn(`模型 ${modelName} 404，切换到 ${ACTIVE_MODELS[modelIndex + 1]}`);
                         return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
                     }
                     let errMsg = `HTTP ${response.status}`;
@@ -577,7 +573,7 @@
                 })).filter(item => item.nameAndSpec);
 
             } catch (error) {
-                if (modelIndex + 1 < FALLBACK_MODELS.length) {
+                if (modelIndex + 1 < ACTIVE_MODELS.length) {
                     return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
                 }
                 throw error;
