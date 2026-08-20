@@ -133,18 +133,12 @@
     </div>
 
     <script type="module">
-        // 官方最新推荐的 Flash 模型列表
-        const ACTIVE_MODELS = [
-            "gemini-3.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite"
-        ];
-
         const appState = {
             apiKey: "",
             files: [],
             extractedItems: [],
             isProcessing: false,
+            cachedModelUrl: "" // 自动匹配到的可用模型端点
         };
 
         const D = {
@@ -191,7 +185,6 @@
             D.mainContent.classList.remove('hidden');
         }
 
-        // 明文/密文切换
         D.toggleKeyVisible.addEventListener('click', () => {
             if (D.apiKeyInput.type === 'password') {
                 D.apiKeyInput.type = 'text';
@@ -202,12 +195,12 @@
             }
         });
 
-        // 保存 API Key
         D.saveKeyButton.addEventListener('click', () => {
             const inputKey = D.apiKeyInput.value.replace(/\s+/g, '').trim();
             if (inputKey && inputKey.length >= 15) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
+                appState.cachedModelUrl = "";
                 showMainContent();
                 showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
@@ -219,6 +212,7 @@
             if(confirm('确定要清除本地保存的 API 密钥吗？清除后需要重新输入。')) {
                 localStorage.removeItem('GEMINI_API_KEY');
                 appState.apiKey = "";
+                appState.cachedModelUrl = "";
                 D.apiKeyInput.value = "";
                 resetApp();
                 showKeySetup();
@@ -459,9 +453,43 @@
             showMessage('CSV 文件已生成并开始下载。', 'success');
         }
 
-        async function callGeminiAPI(base64Data, mimeType, modelIndex = 0) {
-            const modelName = ACTIVE_MODELS[modelIndex];
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${appState.apiKey}`;
+        // 🌟 核心突破：自动探测您当前 Key 真实支持的所有有效生成模型端点
+        async function discoverWorkingEndpoint() {
+            if (appState.cachedModelUrl) return appState.cachedModelUrl;
+
+            // 1. 优先直接向官方 API 获取该 Key 的模型清单
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${appState.apiKey}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.models || [];
+                    // 挑选支持 generateContent 的模型，优先 flash，其次任意可用模型
+                    const valid = list.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+                    const best = valid.find(m => m.name.includes("flash")) || valid[0];
+                    if (best) {
+                        const cleanName = best.name.replace(/^models\//, '');
+                        appState.cachedModelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${appState.apiKey}`;
+                        console.log("成功自动适配当前可用模型:", cleanName);
+                        return appState.cachedModelUrl;
+                    }
+                }
+            } catch (e) {
+                console.warn("自动探测模型列表出错，转入候选重试链:", e);
+            }
+
+            // 2. 候选链备用
+            const candidates = [
+                "gemini-2.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-2.5-flash-lite",
+                "gemini-1.5-flash-latest"
+            ];
+            appState.cachedModelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${candidates[0]}:generateContent?key=${appState.apiKey}`;
+            return appState.cachedModelUrl;
+        }
+
+        async function callGeminiAPI(base64Data, mimeType) {
+            const API_URL = await discoverWorkingEndpoint();
 
             const systemPrompt = `你是一个专业的送货单数据提取助手。请提取图片中的送货单号以及每一条货物的“名称及规格”、“单位”、“数量”、“单价”。
 注意：
@@ -504,70 +532,57 @@
                 }
             };
 
-            try {
-                if (!appState.apiKey) throw new Error("请先设置 API Key。");
-                
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    // 如果遇到 404，自动尝试下一个候选模型
-                    if (response.status === 404 && modelIndex + 1 < ACTIVE_MODELS.length) {
-                        console.warn(`模型 ${modelName} 404，正在切换到 ${ACTIVE_MODELS[modelIndex + 1]}`);
-                        return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
-                    }
-                    let errMsg = `HTTP ${response.status}`;
-                    try {
-                        const parsedErr = JSON.parse(errorText);
-                        errMsg += ` (${parsedErr.error?.message || errorText})`;
-                    } catch(e) {
-                        errMsg += ` (${errorText})`;
-                    }
-                    throw new Error(errMsg);
+            if (!response.ok) {
+                // 如果当前缓存的端点失败，清除缓存允许下次重探
+                appState.cachedModelUrl = "";
+                const errorText = await response.text();
+                let errMsg = `HTTP ${response.status}`;
+                try {
+                    const parsedErr = JSON.parse(errorText);
+                    errMsg += ` (${parsedErr.error?.message || errorText})`;
+                } catch(e) {
+                    errMsg += ` (${errorText})`;
                 }
-
-                const result = await response.json();
-                const textOutput = result.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                if (!textOutput) {
-                    throw new Error("模型未返回文本内容");
-                }
-
-                const cleanedJsonString = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-                const parsed = JSON.parse(cleanedJsonString);
-                
-                let deliveryNo = "";
-                let items = [];
-
-                if (Array.isArray(parsed)) {
-                    items = parsed;
-                } else if (parsed && typeof parsed === 'object') {
-                    deliveryNo = parsed.deliveryNo || parsed.orderNo || parsed.no || "";
-                    items = parsed.items || parsed.details || parsed.list || [];
-                    if (!Array.isArray(items) && parsed.nameAndSpec) {
-                        items = [parsed];
-                    }
-                }
-
-                return items.map(item => ({
-                    deliveryNo: item.deliveryNo || deliveryNo,
-                    nameAndSpec: item.nameAndSpec || item.spec || "",
-                    unit: item.unit || "只",
-                    quantity: Number(item.quantity) || 0,
-                    unitPrice: Number(item.unitPrice) || 0,
-                    isPriceCertain: item.isPriceCertain !== false
-                })).filter(item => item.nameAndSpec);
-
-            } catch (error) {
-                if (modelIndex + 1 < ACTIVE_MODELS.length) {
-                    return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
-                }
-                throw error;
+                throw new Error(errMsg);
             }
+
+            const result = await response.json();
+            const textOutput = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!textOutput) {
+                throw new Error("模型未返回文本内容");
+            }
+
+            const cleanedJsonString = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanedJsonString);
+            
+            let deliveryNo = "";
+            let items = [];
+
+            if (Array.isArray(parsed)) {
+                items = parsed;
+            } else if (parsed && typeof parsed === 'object') {
+                deliveryNo = parsed.deliveryNo || parsed.orderNo || parsed.no || "";
+                items = parsed.items || parsed.details || parsed.list || [];
+                if (!Array.isArray(items) && parsed.nameAndSpec) {
+                    items = [parsed];
+                }
+            }
+
+            return items.map(item => ({
+                deliveryNo: item.deliveryNo || deliveryNo,
+                nameAndSpec: item.nameAndSpec || item.spec || "",
+                unit: item.unit || "只",
+                quantity: Number(item.quantity) || 0,
+                unitPrice: Number(item.unitPrice) || 0,
+                isPriceCertain: item.isPriceCertain !== false
+            })).filter(item => item.nameAndSpec);
         }
 
         async function handleProcessAll() {
