@@ -31,7 +31,7 @@
     <div id="app" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 border border-gray-100">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-extrabold text-indigo-700 border-b-2 border-indigo-100 pb-3 mb-2">手写送货单电子化助手</h1>
-            <p class="text-gray-600">已开启全自动模型探测与自愈机制（彻底告别 404），支持一键导出税局标准导入模板。</p>
+            <p class="text-gray-600">已开启全自动模型探测机制（免受 404 影响），支持一键导出税局标准导入模板。</p>
         </header>
 
         <!-- API Key 设置区 -->
@@ -133,19 +133,12 @@
     </div>
 
     <script type="module">
-        // 官方最新优先级候选列表（已完全剔除所有已下线的 2.0 / 2.5 / 1.5 旧版代号）
-        const PREFERRED_MODELS = [
-            "gemini-3.6-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-2.5-flash-preview-09-2025"
-        ];
-
         const appState = {
             apiKey: "",
             files: [],
             extractedItems: [],
             isProcessing: false,
-            validModelNames: [] // 动态探测到的可用模型池
+            cachedModelUrl: "" // 自动匹配到的可用模型端点
         };
 
         const D = {
@@ -207,7 +200,7 @@
             if (inputKey && inputKey.length >= 15) {
                 localStorage.setItem('GEMINI_API_KEY', inputKey);
                 appState.apiKey = inputKey;
-                appState.validModelNames = [];
+                appState.cachedModelUrl = "";
                 showMainContent();
                 showMessage('密钥已保存到本地浏览器。', 'success');
             } else {
@@ -219,7 +212,7 @@
             if (confirm('确定要清除本地保存的 API 密钥吗？清除后需要重新输入。')) {
                 localStorage.removeItem('GEMINI_API_KEY');
                 appState.apiKey = "";
-                appState.validModelNames = [];
+                appState.cachedModelUrl = "";
                 D.apiKeyInput.value = "";
                 resetApp();
                 showKeySetup();
@@ -362,6 +355,7 @@
             D.tableOutput.innerHTML = html;
         }
 
+        // 导出符合税务局官方原版四 Sheet 架构的 Excel 导入文件
         function downloadTaxExcel() {
             const taxRate = D.taxRateSelect.value;
             const items = appState.extractedItems;
@@ -369,6 +363,7 @@
 
             const wb = XLSX.utils.book_new();
 
+            // 1. 主表：1-明细模板
             const sheetData = [
                 [
                     "填表说明：\n1、项目名称：无需写商品和服务税收分类简称（*号以及中间内容）。\n2、导入前请在电子税务局【开票业务】-【开票信息维护】中对开具的项目信息进行维护，或在导入模板中填写“商品与服务税收分类编码”。\n3、数量、单价可任填其中一项，或者仅填金额；如果三项均填写，导入后系统将默认以填写的数量*单价=金额进行误差校验；\n商品单价、商品数量：小数点后最多保留13位小数；\n金额：小数点后最多保留2位小数。"
@@ -405,12 +400,15 @@
             const ws1 = XLSX.utils.aoa_to_sheet(sheetData);
             XLSX.utils.book_append_sheet(wb, ws1, "1-明细模板");
 
+            // 2. 校验表：excelVersion (税局导入强制版本标识)
             const wsVersion = XLSX.utils.aoa_to_sheet([[""], [""], [""], ["mx;20250501"]]);
             XLSX.utils.book_append_sheet(wb, wsVersion, "excelVersion");
 
+            // 3. 行政区划表：xzqhdm
             const wsXz = XLSX.utils.aoa_to_sheet([["北京市怀柔区"], ["北京市平谷区"], ["北京市昌平区"], ["北京市大兴区"]]);
             XLSX.utils.book_append_sheet(wb, wsXz, "xzqhdm");
 
+            // 4. 特定业务表：2-特定业务信息
             const ws2 = XLSX.utils.aoa_to_sheet([
                 ["不动产销售说明", null, null, null, null, null, null, null, null, "不动产租赁说明"],
                 ["非必填\n（限40字符)", "必填\n合计（限120字符)", null, "非必填\n（限28字符)", "非必填\n（限20字符)", "非必填\n（限20字符)\t", "必填\n\t（限20字符)", "必填(是/否)\n\t（限2字符)", "必填\n\t（限12字符)", "必填\n（限40字符)\t"],
@@ -455,60 +453,47 @@
             showMessage('CSV 文件已生成并开始下载。', 'success');
         }
 
-        // 🌟 核心突破：智能过滤失效旧模型，优先匹配最新 3.6-flash / 3.5 系列
-        async function getAvailableModelList() {
-            if (appState.validModelNames && appState.validModelNames.length > 0) {
-                return appState.validModelNames;
-            }
+        // 🌟 核心：自动探测该 Key 实际可用的最新模型端点（过滤掉已下线的旧版本）
+        async function discoverWorkingEndpoint() {
+            if (appState.cachedModelUrl) return appState.cachedModelUrl;
 
-            const discovered = [];
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${appState.apiKey}`);
                 if (res.ok) {
                     const data = await res.json();
-                    const list = (data.models || []).filter(m => 
-                        m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent")
-                    );
-                    const names = list.map(m => m.name.replace(/^models\//, ''));
-
-                    // 1. 优先放入首选推荐模型
-                    for (const pref of PREFERRED_MODELS) {
-                        if (names.includes(pref) && !discovered.includes(pref)) {
-                            discovered.push(pref);
-                        }
-                    }
-
-                    // 2. 补充其他支持的 Flash 模型（排除明确已下线的旧版本）
-                    const deprecatedKeywords = ["2.0-flash-lite", "gemini-1.5", "gemini-1.0"];
-                    for (const name of names) {
-                        const isDeprecated = deprecatedKeywords.some(kw => name.includes(kw));
-                        if (!isDeprecated && name.includes("flash") && !discovered.includes(name)) {
-                            discovered.push(name);
-                        }
+                    const list = data.models || [];
+                    
+                    // 过滤出支持 generateContent 的模型
+                    const valid = list.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"));
+                    
+                    // 明确排除已被弃用的老模型关键词
+                    const deprecatedKw = ["2.0-flash-lite", "gemini-2.5-flash", "gemini-1.5", "gemini-1.0"];
+                    const activeModels = valid.filter(m => !deprecatedKw.some(kw => m.name.includes(kw)));
+                    
+                    // 优先选择带 flash 的新模型
+                    const best = activeModels.find(m => m.name.includes("flash")) || activeModels[0];
+                    if (best) {
+                        const cleanName = best.name.replace(/^models\//, '');
+                        appState.cachedModelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${appState.apiKey}`;
+                        console.log("成功自动适配当前可用模型:", cleanName);
+                        return appState.cachedModelUrl;
                     }
                 }
             } catch (e) {
-                console.warn("探测模型列表出错，将使用预设模型列表:", e);
+                console.warn("自动探测模型列表出错，转入候选重试链:", e);
             }
 
-            // 如果探测为空，使用推荐备用列表
-            if (discovered.length === 0) {
-                discovered.push(...PREFERRED_MODELS);
-            }
-
-            appState.validModelNames = discovered;
-            console.log("最终可用模型调用链:", appState.validModelNames);
-            return appState.validModelNames;
+            // 备用候选链（更新为最新有效版本）
+            const candidates = [
+                "gemini-3.6-flash",
+                "gemini-3.5-flash-lite"
+            ];
+            appState.cachedModelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${candidates[0]}:generateContent?key=${appState.apiKey}`;
+            return appState.cachedModelUrl;
         }
 
-        async function callGeminiAPI(base64Data, mimeType, modelIndex = 0) {
-            const modelList = await getAvailableModelList();
-            if (modelIndex >= modelList.length) {
-                throw new Error("所有可用模型均尝试失败，请检查 API Key 额度或网络连接。");
-            }
-
-            const modelName = modelList[modelIndex];
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${appState.apiKey}`;
+        async function callGeminiAPI(base64Data, mimeType) {
+            const API_URL = await discoverWorkingEndpoint();
 
             const systemPrompt = `你是一个专业的送货单数据提取助手。请提取图片中的送货单号以及每一条货物的“名称及规格”、“单位”、“数量”、“单价”。
 注意：
@@ -558,13 +543,8 @@
             });
 
             if (!response.ok) {
+                appState.cachedModelUrl = ""; // 如果当前端点失败，立即重置缓存允许下次重新探测
                 const errorText = await response.text();
-                // 遇 404 立即从模型池中剔除该失效模型，并自动顺延尝试下一个
-                if (response.status === 404 && modelIndex + 1 < modelList.length) {
-                    console.warn(`模型 ${modelName} 返回 404，自动无缝切换到 ${modelList[modelIndex + 1]}`);
-                    return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
-                }
-
                 let errMsg = `HTTP ${response.status}`;
                 try {
                     const parsedErr = JSON.parse(errorText);
