@@ -128,7 +128,8 @@
     </div>
 
     <script type="module">
-        const MODEL_NAME = "gemini-1.5-flash";
+        // 主模型与后备模型链
+        const PRIMARY_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
         
         const appState = {
             apiKey: "",
@@ -234,7 +235,6 @@
             if(appState.apiKey) showMessage('请选择一张或多张送货单图片开始处理。', 'info');
         }
 
-        // 带容错与降级的图片压缩读取
         function compressAndConvertToBase64(file, maxDimension = 1600, quality = 0.85) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -339,18 +339,15 @@
             D.tableOutput.innerHTML = html;
         }
 
-        // 导出符合税务模板的 Excel 文件 (.xlsx)
         function downloadTaxExcel() {
             const taxRate = D.taxRateSelect.value;
             const items = appState.extractedItems;
             if (!items || items.length === 0) return;
 
             const sheetData = [
-                // 第 1 行：填表说明
                 [
                     "填表说明：\n1、项目名称：无需写商品和服务税收分类简称（*号以及中间内容）。\n2、导入前请在电子税务局【开票业务】-【开票信息维护】中对开具的项目信息进行维护，或在导入模板中填写“商品与服务税收分类编码”。\n3、数量、单价可任填其中一项，或者仅填金额；如果三项均填写，导入后系统将默认以填写的数量*单价=金额进行误差校验；\n商品单价、商品数量：小数点后最多保留13位小数；\n金额：小数点后最多保留2位小数。"
                 ],
-                // 第 2 行：格式限制
                 [
                     "必填\n(限100字符)",
                     "非必填\n(限19字符)",
@@ -364,7 +361,6 @@
                     "非必填\n（限15字符)",
                     "非必填\n（限15字符)   "
                 ],
-                // 第 3 行：表头
                 [
                     "项目名称",
                     "商品和服务税收分类编码",
@@ -387,17 +383,17 @@
                 const spec = item.nameAndSpec || "";
 
                 sheetData.push([
-                    "胶袋",              // 1. 项目名称
-                    "",                  // 2. 商品和服务税收分类编码
-                    spec,                // 3. 规格型号
-                    item.unit || "只",   // 4. 单位
-                    quantity,            // 5. 商品数量
-                    unitPrice,           // 6. 商品单价
-                    amount,              // 7. 金额
-                    taxRate,             // 8. 税率
-                    "",                  // 9. 折扣金额
-                    taxRate === "0" ? "免税" : "", // 10. 优惠政策类型
-                    ""                   // 11. 煤炭种类
+                    "胶袋",
+                    "",
+                    spec,
+                    item.unit || "只",
+                    quantity,
+                    unitPrice,
+                    amount,
+                    taxRate,
+                    "",
+                    taxRate === "0" ? "免税" : "",
+                    ""
                 ]);
             });
 
@@ -408,7 +404,6 @@
             showMessage('发票导入模板 Excel 文件已生成并开始下载。', 'success');
         }
 
-        // 常规 CSV 下载
         function downloadCSV() {
             const items = appState.extractedItems;
             const headers = ["送货单号", "项目名称", "规格型号", "单位", "数量", "单价", "金额"];
@@ -442,9 +437,12 @@
             showMessage('CSV 文件已生成并开始下载。', 'success');
         }
 
-        async function callGeminiAPI(base64Data, mimeType, attempt = 1) {
-            const MAX_RETRIES = 3;
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${appState.apiKey}`;
+        async function callGeminiAPI(base64Data, mimeType, modelIndex = 0) {
+            if (modelIndex >= PRIMARY_MODELS.length) {
+                throw new Error("所有模型调用均失败，请检查 API Key 额度或网络连接。");
+            }
+            const currentModel = PRIMARY_MODELS[modelIndex];
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${appState.apiKey}`;
 
             const systemPrompt = `你是一个专业的送货单数据提取助手。请提取图片中的送货单号以及每一条货物的“名称及规格”、“单位”、“数量”、“单价”。
 注意：
@@ -498,6 +496,11 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
+                    // 如果是 404 模型不存在，自动尝试后备模型
+                    if (response.status === 404 && modelIndex + 1 < PRIMARY_MODELS.length) {
+                        console.warn(`模型 ${currentModel} 返回 404，尝试自动切换到 ${PRIMARY_MODELS[modelIndex + 1]}`);
+                        return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
+                    }
                     let errMsg = `HTTP ${response.status}`;
                     try {
                         const parsedErr = JSON.parse(errorText);
@@ -515,7 +518,6 @@
                     throw new Error("模型未返回文本内容");
                 }
 
-                // 强化 JSON 清洗与多结构解析
                 const cleanedJsonString = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
                 const parsed = JSON.parse(cleanedJsonString);
                 
@@ -542,10 +544,9 @@
                 })).filter(item => item.nameAndSpec);
 
             } catch (error) {
-                if (attempt < MAX_RETRIES) {
-                    const delay = attempt * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return callGeminiAPI(base64Data, mimeType, attempt + 1);
+                // 如果当前模型失败且还有备选模型，尝试备选
+                if (modelIndex + 1 < PRIMARY_MODELS.length) {
+                    return callGeminiAPI(base64Data, mimeType, modelIndex + 1);
                 }
                 throw error;
             }
@@ -570,7 +571,7 @@
                 const file = appState.files[i];
                 const fileNumber = i + 1;
                 
-                D.loadingMessage.textContent = `正在快速识别图片 ${fileNumber} / ${totalFiles} (${file.name})...`;
+                D.loadingMessage.textContent = `正在极速识别图片 ${fileNumber} / ${totalFiles} (${file.name})...`;
 
                 try {
                     const { base64Data, mimeType } = await compressAndConvertToBase64(file);
@@ -595,7 +596,6 @@
                 }
             }
             
-            // 按送货单号从小到大升序排序
             appState.extractedItems.sort((a, b) => {
                 const aNum = parseInt(a.deliveryNo) || 0;
                 const bNum = parseInt(b.deliveryNo) || 0;
